@@ -2,47 +2,43 @@ package com.sangupta.behance;
 
 import java.util.List;
 
-import com.google.gson.FieldNamingPolicy;
-import com.google.gson.Gson;
 import com.sangupta.behance.domain.Project;
 import com.sangupta.behance.domain.Project.ProjectList;
-import com.sangupta.jerry.http.WebInvoker;
-import com.sangupta.jerry.http.WebResponse;
+import com.sangupta.behance.domain.Project.SingleProject;
+import com.sangupta.behance.domain.ProjectComments;
+import com.sangupta.behance.domain.UserAppreciated;
 import com.sangupta.jerry.util.AssertUtils;
-import com.sangupta.jerry.util.GsonUtils;
 import com.sangupta.jerry.util.UriUtils;
 
 /**
  * 
- * 
+ * @author sangupta
+ *
  */
-public class BehanceClient {
+public class BehanceClient extends AbstractBehanceClient {
 	
-	private static final Gson GSON = GsonUtils.getGson(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES);
-	
-	private static String BASE_URL = "http://www.behance.net/v2/";
-	
-	private final String apiKey;
-	
-	private final String clientSecret;
-	
+	/**
+	 * Create the behance client.
+	 * 
+	 * @param apiKey
+	 * @param clientSecret
+	 */
 	public BehanceClient(String apiKey, String clientSecret) {
-		this.apiKey = apiKey;
-		this.clientSecret = clientSecret;
+		super(apiKey, clientSecret);
 	}
 	
-	public List<Project> searchProjects(String query) {
+	/**
+	 * Search for projects.
+	 * 
+	 * @param query
+	 * @return
+	 */
+	public List<Project> search(String query) {
 		if(AssertUtils.isEmpty(query)) {
 			throw new IllegalArgumentException("Query cannot be empty");
 		}
 		
-		String url = UriUtils.addWebPaths(BASE_URL, "projects?q=" + UriUtils.encodeURIComponent(query) + "&api_key=" + this.apiKey);
-		WebResponse response = WebInvoker.getResponse(url);
-		if(response == null || !response.isSuccess()) {
-			return null;
-		}
-		
-		ProjectList projects = GSON.fromJson(response.getContent(), ProjectList.class);
+		ProjectList projects = this.invokeApi("projects?q=" + UriUtils.encodeURIComponent(query), ProjectList.class);
 		if(projects != null) {
 			return projects.projects;
 		}
@@ -50,5 +46,81 @@ public class BehanceClient {
 		return null;
 	}
 
+	/**
+	 * Get project details.
+	 * 
+	 * @param id
+	 * @return
+	 */
+	public Project getDetails(String id) {
+		return this.getDetails(Integer.parseInt(id));
+	}
+	
+	/**
+	 * Get project details.
+	 * 
+	 * @param id
+	 * @return
+	 */
+	public Project getDetails(int id) {
+		if (id < 1) {
+			throw new IllegalArgumentException("ID cannot be less than or equal to zero");
+		}
+		
+		SingleProject project = this.invokeApi("projects/" + id, SingleProject.class);
+		if (project == null) {
+			return null;
+		}
+
+		return project.project;
+	}
+
+	/**
+	 * Get the comments for a project.
+	 * 
+	 * @param id
+	 * @return
+	 */
+	public ProjectComments getComments(int id) {
+		return getComments(id, 1);
+	}
+	
+	/**
+	 * Get the comments for a project.
+	 * 
+	 * @param id
+	 * @param page
+	 * @return
+	 */
+	public ProjectComments getComments(int id, int page) {
+		if (id < 1) {
+			throw new IllegalArgumentException("ID cannot be less than or equal to zero");
+		}
+		
+		ProjectComments pc = this.invokeApi("projects/"+ id + "/comments?page=" + page, ProjectComments.class);
+		if(pc == null) {
+			return pc;
+		}
+		
+		pc.projectID = String.valueOf(id);
+		pc.page = page;
+		
+		return pc;
+	}
+	
+	// ---------------------------
+	// User authentication required functions
+	// ---------------------------
+	
+	/**
+	 * Returns whether current user has appreciated this project. Requires post_as scope.
+	 * 
+	 * @param accessToken
+	 * @param projectID
+	 * @return
+	 */
+	public UserAppreciated hasUserAppreciatedProject(String accessToken, int projectID) {
+		return this.invokeApi("projects/" + projectID + "/view?access_token=" + accessToken, UserAppreciated.class);
+	}
 	
 }
